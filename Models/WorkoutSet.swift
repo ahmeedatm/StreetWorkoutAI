@@ -8,16 +8,18 @@ class WorkoutSet {
     var rpe: Int? // Rate of Perceived Exertion (1-10)
     var isCompleted: Bool = false
     var completedAt: Date
+    var index: Int = 0
     
     // Relation inverse (Un set appartient à un exercice)
     var exercise: Exercise
     var workout: Workout?
     
-    init(reps: Int, weight: Double? = nil, rpe: Int? = nil, exercise: Exercise) {
+    init(reps: Int, weight: Double? = nil, rpe: Int? = nil, exercise: Exercise, index: Int = 0) {
         self.reps = reps
         self.weight = weight
         self.rpe = rpe
         self.exercise = exercise
         self.completedAt = Date()
+        self.index = index
     }
 }

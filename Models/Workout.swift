@@ -7,6 +7,7 @@ class Workout {
     var scheduledAt: Date
     var createdAt: Date
     var finishedAt: Date?
+    var isTemplate: Bool = false
     
     var type: ExerciseType {
         // 1. On récupère la liste des types de tous les exos (sans les nil)
@@ -35,12 +36,13 @@ class Workout {
     @Relationship(deleteRule: .cascade, inverse: \WorkoutSet.workout)
     var sets: [WorkoutSet] = []
     
-    init(name: String? = nil, sets: [WorkoutSet], scheduledAt: Date) {
+    init(name: String? = nil, sets: [WorkoutSet], scheduledAt: Date, isTemplate: Bool) {
         self.name = name
         self.sets = sets
         self.scheduledAt = scheduledAt
         self.createdAt = Date()
         self.finishedAt = nil
+        self.isTemplate = isTemplate
     }
     
 }

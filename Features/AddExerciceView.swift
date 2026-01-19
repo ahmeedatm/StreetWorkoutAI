@@ -12,6 +12,9 @@ struct AddExerciseView: View {
     @State private var types: ExerciseType = ExerciseType.push
     @State private var selectedMuscle: String = "Pectoraux"
     
+    @State private var prWeight: Double? // Pour le poids (ex: 100 kg)
+    @State private var prReps: Int?      // Pour les reps (ex: 20 reps)
+    
     // Une petite liste statique pour le menu déroulant
     let muscles = ["Pectoraux", "Dos", "Jambes", "Épaules", "Bras", "Abdos", "Cardio"]
     
@@ -35,6 +38,27 @@ struct AddExerciseView: View {
                         }
                     }
                 }
+                Section("Définir un record initial (Optionnel)") {
+                    // $name veut dire : "Lie ce champ texte à la variable name" (Binding)
+                    HStack {
+                        Text("Poids max (kg)")
+                        Spacer()
+                        TextField("0", value: $prWeight, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+                    HStack {
+                        Text("Réps max (PDC)")
+                        Spacer()
+                        TextField("0", value: $prReps, format: .number)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+                    
+                }
+
             }
             .navigationTitle("Nouvel Exercice")
             .navigationBarTitleDisplayMode(.inline)
@@ -61,13 +85,53 @@ struct AddExerciseView: View {
     // Logique de sauvegarde
     func saveExercise() {
         // 1. Créer l'objet
-        let newExercise = Exercise(name: name, muscleGroup: selectedMuscle, type: types)
-        
-        // 2. Insérer dans le contexte (DB)
+        let newExercise = Exercise(
+                    name: name,
+                    muscleGroup: selectedMuscle,
+                    type: types,
+                )
         context.insert(newExercise)
         
         // 3. Fermer la fenêtre
         dismiss()
+    }
+    
+    func createInitialRecord(for exercise: Exercise) {
+        // On crée une séance "Archive" pour stocker ces records
+        let recordWorkout = Workout(
+            name: "Initialisation Records",
+            sets: [], // On commence vide
+            scheduledAt: Date.now.addingTimeInterval(-86400),
+            isTemplate: false
+        )
+        recordWorkout.finishedAt = Date.now
+        
+        // 1. Gérer le Record de POIDS (Force)
+        if let w = prWeight, w > 0 {
+            let weightSet = WorkoutSet(
+                reps: 1, // Par convention, un "Max Weight" est souvent sur 1 rep
+                weight: w,
+                exercise: exercise
+            )
+            weightSet.isCompleted = true
+            recordWorkout.sets.append(weightSet)
+        }
+        
+        // 2. Gérer le Record d'ENDURANCE (Reps PDC)
+        if let r = prReps, r > 0 {
+            let repSet = WorkoutSet(
+                reps: r,
+                weight: nil, // 0kg / PDC
+                exercise: exercise
+            )
+            repSet.isCompleted = true
+            recordWorkout.sets.append(repSet)
+        }
+        
+        // 3. On sauvegarde le tout (si on a ajouté au moins un truc)
+        if !recordWorkout.sets.isEmpty {
+            context.insert(recordWorkout)
+        }
     }
 }
 

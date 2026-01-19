@@ -4,85 +4,115 @@ import SwiftData
 struct WorkoutDetailView: View {
     @Environment(\.modelContext) private var context
     
-    // 1. On récupère le catalogue pour le Picker
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    
-    // 2. On reçoit la séance en mode écriture
     @Bindable var workout: Workout
     
-    // 3. Variables du formulaire d'ajout
+    // Variables du formulaire d'ajout
     @State private var reps: Int = 10
-    @State private var weight: Double? // Optionnel car poids du corps possible
-    @State private var selectedExercise: Exercise? // Optionnel au début
+    @State private var weight: Double?
+    @State private var selectedExercise: Exercise?
     @State private var showCreateExerciseSheet: Bool = false
+    @State private var showRunner: Bool = false
     
-    var sortedSets: [WorkoutSet]{
-        return workout.sets.sorted { $0.completedAt < $1.completedAt }
+    var sortedSets: [WorkoutSet] {
+            return workout.sets.sorted { $0.index < $1.index }
     }
     
     var body: some View {
+        // --- CAS 1 : SÉANCE ACTIVE ---
         if workout.finishedAt == nil {
-            Form {
-                // SECTION 1 : L'HISTORIQUE (Ce qui est déjà fait)
-                Section("Séries réalisées") {
-                    // On boucle sur les séries de la séance (et pas sur le catalogue exercises !)
-                    ForEach(sortedSets) { set in
-                        HStack {
-                            WorkoutSetRow(set: set)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) { // 1. On ouvre le menu
-                            
-                            // 2. On crée le bouton visuel
-                            Button(role: .destructive) {
-                                // 3. C'est ICI qu'on déclenche l'action quand l'utilisateur clique
-                                deleteSet(set: set)
-                            } label: {
-                                // 4. L'icône du bouton (La poubelle)
-                                Label("Supprimer", systemImage: "trash")
-                            }
-                            
-                        }
-                    }
-                }
+            // 👇 1. On aligne le ZStack en bas pour coller le bouton
+            ZStack(alignment: .bottom) {
                 
-                //Le bouton de fin de séance
-                Section{
-                    Button("Terminer la séance"){
-                        finishWorkout()
+                // A. LE FOND (Le Formulaire)
+                Form {
+                    Section("Séries réalisées") {
+                        ForEach(sortedSets) { set in
+                            HStack {
+                                WorkoutSetRow(set: set)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    deleteSet(set: set)
+                                } label: {
+                                    Label("Supprimer", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                    Section {
+                        Button("Terminer la séance") {
+                            finishWorkout()
+                        }
                     }
                 }
+                // 👇 Important : On ajoute du vide en bas du formulaire pour que le dernier exo
+                // ne soit pas caché derrière le bouton flottant quand on scrolle tout en bas.
+                .safeAreaPadding(.bottom, 100)
+                
+                // B. LE BOUTON FLOTTANT (Posé par-dessus)
+                Button {
+                    showRunner = true
+                } label: {
+                    HStack {
+                        Image(systemName: "play.fill")
+                        Text("Lancer la séance (Mode Focus)")
+                    }
+                    .bold()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundStyle(.white)
+                    .clipShape(Capsule())
+                    .shadow(radius: 5)
+                }
+                .padding() // Marge autour du bouton (gauche/droite/bas)
+                .background(.thinMaterial) // Petit effet flou derrière le bouton (optionnel)
             }
-            // C'est ici qu'on définit le titre, le parent l'affichera
+            // 👇 Les modifieurs sont maintenant sur le ZStack global
             .navigationTitle(workout.name ?? "Nouvelle Séance")
-            // Une petite astuce pour initialiser le picker avec le premier exo dispo
             .onAppear {
                 if selectedExercise == nil {
                     selectedExercise = exercises.first
                 }
             }
             .toolbar {
-                Button {
-                    showCreateExerciseSheet = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 22))
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showCreateExerciseSheet = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 22))
+                    }
                 }
             }
+            
             .sheet(isPresented: $showCreateExerciseSheet) {
                 CreateWorkoutSetView(workout: workout)
             }
-        }else{
+            .fullScreenCover(isPresented: $showRunner) {
+                NavigationStack {
+                    SessionRunnerView(workout: workout)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Quitter") {
+                                    showRunner = false
+                                }
+                            }
+                        }
+                }
+            }
+            
+        } else {
+            // --- CAS 2 : SÉANCE TERMINÉE (ARCHIVE) ---
+            // (Pas de bouton flottant ici)
             Form {
-                // SECTION 1 : L'HISTORIQUE (Ce qui est déjà fait)
                 Section("Résumé de la séance") {
-                    // On boucle sur les séries de la séance (et pas sur le catalogue exercises !)
-                    ForEach(workout.sets.sorted{$0.completedAt < $1.completedAt}) { set in
+                    ForEach(sortedSets) { set in
                         HStack {
-                            // Les infos (Reps / Poids)
                             VStack(alignment: .leading) {
                                 Text(set.exercise.name)
                                     .font(.headline)
-                                    // Bonus Visuel : Si complété, on barre le texte
                                     .strikethrough(set.isCompleted, color: .gray)
                                     .foregroundStyle(set.isCompleted ? .secondary : .primary)
                                 
@@ -99,24 +129,21 @@ struct WorkoutDetailView: View {
                     }
                 }
                 
-                //Le bouton de fin de séance
-                Section{
-                    Button("Reprendre la séance"){
+                Section {
+                    Button("Reprendre la séance") {
                         reopenWorkout()
                     }
                 }
-            }
-            // C'est ici qu'on définit le titre, le parent l'affichera
-            .navigationTitle(workout.name ?? "Nouvelle Séance")
-            // Une petite astuce pour initialiser le picker avec le premier exo dispo
-            .onAppear {
-                if selectedExercise == nil {
-                    selectedExercise = exercises.first
+                Section {
+                    Button("Enregistrer comme Modèle") {
+                        saveAsTemplate()
+                    }
+                    .foregroundStyle(.blue)
                 }
             }
+            .navigationTitle(workout.name ?? "Séance terminée")
         }
     }
-    
     // LA LOGIQUE MÉTIER
     func addSet() {
         // Guard clause : On vérifie qu'on a bien un exercice
@@ -147,6 +174,32 @@ struct WorkoutDetailView: View {
     func reopenWorkout(){
         workout.finishedAt = nil
     }
+    
+    func saveAsTemplate() {
+        // 1. On crée le conteneur, mais on le marque comme TEMPLATE
+        let template = Workout(
+            name: "Routine: \(workout.name ?? "Sans nom")",
+            sets: [],
+            scheduledAt: Date.now, // La date importe peu pour un template
+            isTemplate: true // <--- C'EST ICI QUE CA CHANGE
+        )
+        
+        // 2. On copie les exercices (comme avant)
+        for oldSet in workout.sets {
+            let newSet = WorkoutSet(
+                reps: oldSet.reps,
+                weight: oldSet.weight,
+                exercise: oldSet.exercise
+            )
+            // On remet tout à zéro pour le modèle
+            newSet.isCompleted = false
+            template.sets.append(newSet)
+        }
+        
+        // 3. Sauvegarder
+        context.insert(template)
+        
+    }
 }
 
 struct WorkoutSetRow: View {
@@ -155,6 +208,15 @@ struct WorkoutSetRow: View {
     
     var body: some View {
         HStack {
+            HStack(spacing: 4) {
+                    Text(set.exercise.type.rawValue)
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(set.exercise.type.color)) // Gris très clair natif iOS
+                .clipShape(Capsule()) // Arrondir les bords
                         
             // Les infos (Reps / Poids)
             VStack(alignment: .leading) {
@@ -188,7 +250,7 @@ struct WorkoutSetRow: View {
                     .foregroundStyle(set.isCompleted ? .green : .gray)
             }
             .buttonStyle(.plain) // Important pour ne pas rendre toute la ligne cliquable
-
+            
         }
         .padding(.vertical, 4)
     }
@@ -213,7 +275,7 @@ struct WorkoutSetRow: View {
     
     let tomorrow = Date.now.addingTimeInterval(86400)
     
-    let demoWorkout = Workout(name: "Séance Dos", sets: [set1, set2], scheduledAt: tomorrow)
+    let demoWorkout = Workout(name: "Séance Dos", sets: [set1, set2], scheduledAt: tomorrow, isTemplate: false)
 
     // Insert into the in-memory context
     container.mainContext.insert(demoWorkout)

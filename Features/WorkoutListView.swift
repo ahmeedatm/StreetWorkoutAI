@@ -3,7 +3,10 @@ import SwiftData
 
 struct WorkoutListView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \Workout.createdAt) private var workouts: [Workout]
+    @Query(filter: #Predicate<Workout> { $0.isTemplate == false }, sort: \Workout.scheduledAt)
+    private var workouts: [Workout]
+    
+    @State private var showCreateWorkoutSheet = false
     
     var body: some View {
         NavigationStack {
@@ -42,32 +45,39 @@ struct WorkoutListView: View {
             }
             .navigationTitle("Séances")
             .toolbar {
-                // Un bouton temporaire pour tester l'ajout
-                Button("Ajouter Test", systemImage: "plus") {
-                    addTestWorkout()
+                Button {
+                    showCreateWorkoutSheet = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 22))
                 }
+            }
+            // C'est ici qu'on attache la feuille de création
+            .sheet(isPresented: $showCreateWorkoutSheet) {
+                CreateWorkoutView()
+                    // Pas besoin de passer le container, la feuille hérite de l'environnement du parent
             }
         }
     }
     
     
-    func addTestWorkout() {
-        // Création de l'objet (Instance)
-        let pullup = Exercise(name: "Traction", muscleGroup: "Dos", type: ExerciseType.pull)
-        let pushup = Exercise(name: "Pompes", muscleGroup: "Pectoraux", type: ExerciseType.push)
-        
-        let workoutSet1 = WorkoutSet(reps: 10, weight: 2, rpe: 8, exercise: pushup)
-        let workoutSet2 = WorkoutSet(reps: 8, weight: 5, rpe: 8, exercise: pullup)
-        
-        let tomorrow = Date.now.addingTimeInterval(86400)
-        
-        let newWorkout = Workout(name: "Traction Push", sets: [workoutSet1, workoutSet2], scheduledAt: tomorrow)
-        
-        // Insertion en base (db.add(obj))
-        context.insert(newWorkout)
-        
-        // Pas besoin de context.save(), SwiftData le fait automatiquement à la fin de la boucle d'événement !
-    }
+//    func addTestWorkout() {
+//        // Création de l'objet (Instance)
+//        let pushup = Exercise(name: "Pompes", muscleGroup: "Pectoraux", type: .push, prWeight: 12, prReps: 36)
+//        let pullup = Exercise(name: "Tractions", muscleGroup: "Dos", type: .pull, prWeight: 0, prReps: 6)
+//        
+//        let workoutSet1 = WorkoutSet(reps: 10, weight: 2, rpe: 8, exercise: pushup)
+//        let workoutSet2 = WorkoutSet(reps: 8, weight: 5, rpe: 8, exercise: pullup)
+//        
+//        let tomorrow = Date.now.addingTimeInterval(86400)
+//        
+//        let newWorkout = Workout(name: "Traction Push", sets: [workoutSet1, workoutSet2], scheduledAt: tomorrow, isTemplate: false)
+//        
+//        // Insertion en base (db.add(obj))
+//        context.insert(newWorkout)
+//        
+//        // Pas besoin de context.save(), SwiftData le fait automatiquement à la fin de la boucle d'événement !
+//    }
     
     func deleteItems(at offsets: IndexSet) {
         for index in offsets {

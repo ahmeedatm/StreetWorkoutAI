@@ -13,59 +13,114 @@ struct ExerciseListView: View {
     // Le plus fou : Si la table change, cette variable se met à jour et l'écran se redessine.
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     
+    @State private var showCreateExerciseSheet = false
+    @State private var searchText = ""
+    
     // 3. LE CORPS DE LA VUE (Le HTML/Template)
     var body: some View {
         NavigationStack {
-            List {
-                // Boucle For-Each sur les résultats de la requête
-                ForEach(exercises) { exercise in
-                    HStack {
-                        Text(exercise.name)
-                            .font(.headline)
-                        Spacer()
-                        
-                        HStack(spacing: 4) {
-                                Text(exercise.type.rawValue)
-                                    .font(.caption)
-                                    .foregroundStyle(.white)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color(exercise.type.color)) // Gris très clair natif iOS
-                            .clipShape(Capsule()) // Arrondir les bords
-                        
-                    }
+                    // 👇 On appelle la sous-vue en lui passant le texte
+                    ExerciseList(searchString: searchText)
+                        .navigationTitle("Exercices")
+                        .searchable(text: $searchText, prompt: "Rechercher (ex: Pecs, Banc...)") // La barre native iOS
+
                 }
-                // Swipe-to-delete natif
-                .onDelete(perform: deleteItems)
-            }
-            .navigationTitle("Exercices")
-            .toolbar {
-                // Un bouton temporaire pour tester l'ajout
-                Button("Ajouter Test", systemImage: "plus") {
-                    addTestExercise()
-                }
-            }
-        }
     }
     
     // 4. FONCTIONS (Logique Métier basique)
-    
-    func addTestExercise() {
-        // Création de l'objet (Instance)
-        let pullup = Exercise(name: "Traction", muscleGroup: "Dos", type: ExerciseType.pull)
-        let pushup = Exercise(name: "Pompes", muscleGroup: "Pectoraux", type: ExerciseType.push)
-        
-        // Insertion en base (db.add(obj))
-        context.insert(pushup)
-        
-        // Pas besoin de context.save(), SwiftData le fait automatiquement à la fin de la boucle d'événement !
-    }
     
     func deleteItems(at offsets: IndexSet) {
         for index in offsets {
             let exerciseToDelete = exercises[index]
             context.delete(exerciseToDelete)
+        }
+    }
+}
+
+struct ExerciseList: View {
+    @Environment(\.modelContext) private var context
+    @Query private var exercises: [Exercise]
+    
+    // On passe l'init pour construire la requête
+    init(searchString: String) {
+        // La magie SwiftData : On construit le Prédicat dynamiquement
+        _exercises = Query(filter: #Predicate {
+            if searchString.isEmpty {
+                return true // Si vide, on prend tout
+            } else {
+                // Recherche insensible à la casse
+                return $0.name.localizedStandardContains(searchString)
+            }
+        }, sort: \Exercise.name)
+    }
+    
+    var body: some View {
+        List {
+            ForEach(exercises) { exercise in
+                NavigationLink {
+                    // Vers le détail ou l'édition (optionnel pour l'instant)
+                    Text(exercise.name)
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        
+                        // --- LIGNE 1 : NOM + TYPE ---
+                        HStack {
+                            Text(exercise.name)
+                                .font(.headline) // Le nom en gros
+                            
+                            Spacer()
+                            
+                            // Le Badge Type (Push/Pull) calé à droite
+                            Text(exercise.type.rawValue)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(exercise.type.color)
+                                .clipShape(Capsule())
+                        }
+                        
+                        // --- LIGNE 2 : MUSCLE + RECORD ---
+                        HStack {
+                            // Le muscle en gris discret
+                            Text(exercise.muscleGroup)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            
+                            Spacer()
+                            
+                            // Le Record en bleu
+                            HStack(spacing: 4) {
+                                // Petite icône trophée pour le style
+                                if exercise.personalRecord.contains("Max") {
+                                    Image(systemName: "trophy.fill")
+                                        .foregroundStyle(.yellow)
+                                        .font(.caption2)
+                                }
+                                
+                                Text(exercise.personalRecord)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(exercise.personalRecord.contains("Max") ? .blue : .secondary)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.1)) // Fond bleu très léger
+                            .clipShape(Capsule())
+                        }
+                    }
+                    .padding(.vertical, 4) // Un peu d'air en haut et en bas de la cellule
+                }            }
+            .onDelete { indexSet in
+                indexSet.forEach { index in
+                    context.delete(exercises[index])
+                }
+            }
+        }
+        .overlay {
+            if exercises.isEmpty {
+                ContentUnavailableView("Aucun exercice trouvé", systemImage: "magnifyingglass")
+            }
         }
     }
 }

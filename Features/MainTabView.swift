@@ -14,6 +14,12 @@ struct MainTabView: View {
             // Onglet 3 : Exercices
             ExerciseListView() // Idem
                 .tabItem { Label("Exercices", systemImage: "dumbbell") }
+            
+            //Onglet 4 : Profil
+            ProfileView()
+                .tabItem {
+                    Label("Profil", systemImage: "person.crop.circle")
+                }
         }
     }
 }
