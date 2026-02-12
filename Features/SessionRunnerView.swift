@@ -4,6 +4,7 @@ internal import Combine
 
 struct SessionRunnerView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
     
     // La séance à jouer
     var workout: Workout
@@ -11,8 +12,13 @@ struct SessionRunnerView: View {
     // --- ÉTATS DE LA VUE ---
     @State private var currentIndex: Int = 0
     @State private var isResting: Bool = false
+    @State private var showRepsCompletion: Bool = false
+    @State private var showWarmup: Bool = true
+    @State private var showRecommendation: Bool = false
+    @State private var recommendation: WorkoutRecommendation?
     @State private var timeRemaining: Int = 120 // 2 min par défaut
     @State private var totalRestTime: Int = 120 // Pour la barre de progression
+    @State private var sessionStartTime: Date = Date()
     
     // Le Timer
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -26,21 +32,42 @@ struct SessionRunnerView: View {
     }
     
     var body: some View {
-        VStack {
-            // Si on a dépassé le dernier exercice, c'est fini !
-            if currentIndex >= workout.sets.count {
-                finishView
-            } else {
-                // Sinon, on alterne entre Repos et Travail
-                if isResting {
-                    restView
+        ZStack {
+            VStack {
+                // Si on a dépassé le dernier exercice, c'est fini !
+                if currentIndex >= workout.sets.count {
+                    finishView
                 } else {
-                    exerciseView
+                    // Sinon, on alterne entre Repos et Travail
+                    if isResting {
+                        restView
+                    } else {
+                        exerciseView
+                    }
                 }
             }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .tabBar) // On cache la barre du bas pour l'immersion
+            
+            // Sheet pour l'échauffement
+            if showWarmup {
+                WarmupView(workout: workout)
+                    .transition(.move(edge: .bottom))
+                    .onDisappear {
+                        showWarmup = false
+                    }
+            }
+            
+            // Sheet pour saisir les reps
+            if showRepsCompletion && currentIndex < workout.sets.count {
+                let currentSet = workout.sets[currentIndex]
+                RepsCompletionView(set: currentSet, targetReps: currentSet.reps) { repsCompleted, rpe in
+                    showRepsCompletion = false
+                    saveRepsAndContinue(repsCompleted: repsCompleted, rpe: rpe)
+                }
+                .transition(.move(edge: .bottom))
+            }
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar) // On cache la barre du bas pour l'immersion
     }
     
     // MARK: - VUE EXERCICE (WORK)
@@ -55,17 +82,41 @@ struct SessionRunnerView: View {
             
             Spacer()
             
-            // 1. Image / Icône de l'exo
-            Image(systemName: "figure.strengthtraining.traditional") // Placeholder
-                .font(.system(size: 100))
-                .foregroundStyle(.blue)
-                .padding()
-                .background(Circle().fill(Color.blue.opacity(0.1)))
+            // 1. Image / GIF / Vidéo de l'exo
+            if let gifUrl = currentExo.gifUrl, !gifUrl.isEmpty {
+                if let url = URL(string: gifUrl) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 200)
+                            .cornerRadius(12)
+                    } placeholder: {
+                        ProgressView()
+                            .frame(height: 200)
+                    }
+                }
+            } else {
+                Image(systemName: "figure.strengthtraining.traditional")
+                    .font(.system(size: 100))
+                    .foregroundStyle(.blue)
+                    .padding()
+                    .background(Circle().fill(Color.blue.opacity(0.1)))
+            }
             
             // 2. Gros Titre
             Text(currentExo.name)
                 .font(.system(size: 32, weight: .heavy))
                 .multilineTextAlignment(.center)
+            
+            // Description de technique si disponible
+            if let description = currentExo.description {
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
             
             // 3. Instruction (Reps / Poids)
             VStack(spacing: 10) {
@@ -85,6 +136,15 @@ struct SessionRunnerView: View {
                         .padding(.top, 4)
                 }
             }
+            
+            // Record personnel
+            HStack {
+                Label(currentExo.personalRecord, systemImage: "star.fill")
+                    .foregroundStyle(.yellow)
+                    .font(.caption)
+                Spacer()
+            }
+            .padding(.horizontal)
             
             Spacer()
             
@@ -204,37 +264,99 @@ struct SessionRunnerView: View {
             
             Spacer()
             
-            Button("Fermer") {
-                workout.finishedAt = Date.now // On marque la date de fin
-                dismiss()
+            HStack(spacing: 15) {
+                Button("Voir Analyse") {
+                    analyzeWorkout()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                
+                Button("Fermer") {
+                    finishSession()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
             .padding(.bottom, 50)
         }
+        .sheet(isPresented: $showRecommendation) {
+            if let rec = recommendation {
+                WorkoutRecommendationView(workout: workout, recommendation: rec)
+            }
+        }
+    }
+    
+    private func analyzeWorkout() {
+        recommendation = ProgressionAnalyzer.analyzeWorkout(workout)
+        showRecommendation = true
+    }
+    
+    private func finishSession() {
+        workout.finishedAt = Date.now
+        dismiss()
     }
     
     // MARK: - FONCTIONS LOGIQUES
     
     func completeSetAndRest() {
-        // 1. Valider le set actuel
+        // On affiche le formulaire pour saisir les reps
+        showRepsCompletion = true
+    }
+    
+    func saveRepsAndContinue(repsCompleted: Int, rpe: Int?) {
         let currentSet = workout.sets[currentIndex]
+        
+        // 1. Enregistrer les reps complétés
+        currentSet.repsCompleted = repsCompleted
+        currentSet.rpe = rpe
         currentSet.isCompleted = true
         currentSet.completedAt = Date.now
         
-        // 2. Feedback Haptique (Vibration)
+        // 2. Créer une performance record
+        let performance = ExercisePerformance(
+            exercise: currentSet.exercise,
+            repsCompleted: repsCompleted,
+            weight: currentSet.weight,
+            rpe: rpe,
+            notes: currentSet.notes
+        )
+        performance.workout = workout
+        context.insert(performance)
+        
+        // 3. Mettre à jour les records de l'exercice si nécessaire
+        updateExerciseRecords(for: currentSet.exercise, repsCompleted: repsCompleted, weight: currentSet.weight)
+        
+        // 4. Feedback Haptique
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
         
-        // 3. Vérifier si c'est vraiment fini
+        // 5. Vérifier si c'est vraiment fini
         if currentIndex + 1 >= workout.sets.count {
             // C'était le dernier, on va direct à la fin sans repos
             withAnimation {
                 currentIndex += 1
             }
         } else {
-            // 4. Lancer le repos
+            // 6. Lancer le repos
             startRest()
+        }
+    }
+    
+    private func updateExerciseRecords(for exercise: Exercise, repsCompleted: Int, weight: Double?) {
+        // Mise à jour du record de reps
+        if let currentPR = exercise.prReps, repsCompleted > currentPR {
+            exercise.prReps = repsCompleted
+        } else if exercise.prReps == nil {
+            exercise.prReps = repsCompleted
+        }
+        
+        // Mise à jour du record de poids
+        if let weight = weight, weight > 0 {
+            if let currentWeight = exercise.prWeight, weight > currentWeight {
+                exercise.prWeight = weight
+            } else if exercise.prWeight == nil {
+                exercise.prWeight = weight
+            }
         }
     }
     

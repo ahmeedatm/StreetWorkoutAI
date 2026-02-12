@@ -10,7 +10,7 @@ struct StreetWorkoutAIApp: App {
     init() {
         do {
             // On crée le container avec tous tes modèles
-            container = try ModelContainer(for: Exercise.self, Workout.self, WorkoutSet.self)
+            container = try ModelContainer(for: Exercise.self, Workout.self, WorkoutSet.self, ExercisePerformance.self)
         } catch {
             fatalError("Impossible de créer le ModelContainer: \(error)")
         }

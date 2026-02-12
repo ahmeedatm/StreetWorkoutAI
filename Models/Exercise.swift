@@ -36,10 +36,19 @@ class Exercise {
     var prWeight: Double? // Record de force (kg)
     var prReps: Int?      // Record d'endurance (reps)
     
+    // Media
+    var gifUrl: String? // URL vers le GIF/Vidéo de démonstration
+    var videoUrl: String? // URL vers la vidéo tutoriel complète
+    var description: String? // Description de la technique
+    
     // Relation One-to-Many (Un exercice a plusieurs sets)
     // .cascade : Si on supprime l'exercice, on supprime ses sets.
     @Relationship(deleteRule: .cascade, inverse: \WorkoutSet.exercise)
         var sets: [WorkoutSet] = []
+    
+    // Relation avec l'historique de performance
+    @Relationship(deleteRule: .cascade, inverse: \ExercisePerformance.exercise)
+        var performances: [ExercisePerformance] = []
     
     var createdAt: Date
     

@@ -58,8 +58,8 @@ struct ExerciseList: View {
         List {
             ForEach(exercises) { exercise in
                 NavigationLink {
-                    // Vers le détail ou l'édition (optionnel pour l'instant)
-                    Text(exercise.name)
+                    // Vers le graphique de progression détaillé
+                    ProgressChartDetailView(exercise: exercise)
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         
@@ -80,12 +80,23 @@ struct ExerciseList: View {
                                 .clipShape(Capsule())
                         }
                         
-                        // --- LIGNE 2 : MUSCLE + RECORD ---
+                        // --- LIGNE 2 : MUSCLE + RECORD + STATS ---
                         HStack {
                             // Le muscle en gris discret
-                            Text(exercise.muscleGroup)
-                                .font(.subheadline)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(exercise.muscleGroup)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                
+                                // Afficher le nombre d'exécutions
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption2)
+                                    Text("\(exercise.totalCompletions) fois")
+                                        .font(.caption2)
+                                }
                                 .foregroundStyle(.secondary)
+                            }
                             
                             Spacer()
                             

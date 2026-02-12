@@ -7,43 +7,45 @@ struct WorkoutListView: View {
     private var workouts: [Workout]
     
     @State private var showCreateWorkoutSheet = false
+    @State private var filterCompleted: Bool?
+    
+    var filteredWorkouts: [Workout] {
+        if let filter = filterCompleted {
+            return workouts.filter { (workout) -> Bool in
+                if filter {
+                    return workout.finishedAt != nil
+                } else {
+                    return workout.finishedAt == nil
+                }
+            }
+        }
+        return workouts
+    }
     
     var body: some View {
         NavigationStack {
-            List {
-                // Boucle For-Each sur les résultats de la requête
-                ForEach(workouts) { workout in
-                    NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-                        HStack {
-                            VStack(alignment: .leading){
-                                if let name = workout.name {
-                                    Text(name)
-                                        .font(.headline)
-                                    
-                                }else{
-                                    Text("Séance sans nom")
-                                        .font(.headline)
-                                }
-                                
-                                Spacer()
-                                Text(workout.createdAt, format: .dateTime.day().month()).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            HStack(spacing: 4) {
-                                    Text(workout.type.rawValue)
-                                        .font(.caption)
-                                        .foregroundStyle(.white)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color(workout.type.color)) // Gris très clair natif iOS
-                                .clipShape(Capsule()) // Arrondir les bords
+            VStack {
+                // Filtre par statut
+                Picker("Statut", selection: $filterCompleted) {
+                    Text("Tous").tag(Optional<Bool>(nil))
+                    Text("À venir").tag(Optional<Bool>(false))
+                    Text("Terminées").tag(Optional<Bool>(true))
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                
+                List {
+                    // Boucle For-Each sur les résultats de la requête
+                    ForEach(filteredWorkouts) { workout in
+                        NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+                            WorkoutRowView(workout: workout)
                         }
                     }
+                    .onDelete(perform: deleteItems)
                 }
-                .onDelete(perform: deleteItems)
+                .listStyle(.plain)
             }
-            .navigationTitle("Séances")
+            .navigationTitle("Historique")
             .toolbar {
                 Button {
                     showCreateWorkoutSheet = true
@@ -60,24 +62,84 @@ struct WorkoutListView: View {
         }
     }
     
+    func deleteItems(at offsets: IndexSet) {
+        for index in offsets {
+            context.delete(filteredWorkouts[index])
+        }
+    }
+}
+
+struct WorkoutRowView: View {
+    let workout: Workout
     
-//    func addTestWorkout() {
-//        // Création de l'objet (Instance)
-//        let pushup = Exercise(name: "Pompes", muscleGroup: "Pectoraux", type: .push, prWeight: 12, prReps: 36)
-//        let pullup = Exercise(name: "Tractions", muscleGroup: "Dos", type: .pull, prWeight: 0, prReps: 6)
-//        
-//        let workoutSet1 = WorkoutSet(reps: 10, weight: 2, rpe: 8, exercise: pushup)
-//        let workoutSet2 = WorkoutSet(reps: 8, weight: 5, rpe: 8, exercise: pullup)
-//        
-//        let tomorrow = Date.now.addingTimeInterval(86400)
-//        
-//        let newWorkout = Workout(name: "Traction Push", sets: [workoutSet1, workoutSet2], scheduledAt: tomorrow, isTemplate: false)
-//        
-//        // Insertion en base (db.add(obj))
-//        context.insert(newWorkout)
-//        
-//        // Pas besoin de context.save(), SwiftData le fait automatiquement à la fin de la boucle d'événement !
-//    }
+    var durationText: String {
+        guard let finishedAt = workout.finishedAt else { return "En cours" }
+        let duration = finishedAt.timeIntervalSince(workout.createdAt)
+        let minutes = Int(duration / 60)
+        return "\(minutes)min"
+    }
+    
+    var statusIcon: String {
+        if let _ = workout.finishedAt {
+            return "checkmark.circle.fill"
+        } else {
+            return "hourglass.tophalf.fill"
+        }
+    }
+    
+    var statusColor: Color {
+        if let _ = workout.finishedAt {
+            return .green
+        } else {
+            return .orange
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: statusIcon)
+                            .font(.caption)
+                            .foregroundStyle(statusColor)
+                        
+                        Text(workout.name ?? "Séance sans nom")
+                            .font(.headline)
+                        
+                        Spacer()
+                        
+                        Text(workout.type.rawValue)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(workout.type.color))
+                            .clipShape(Capsule())
+                    }
+                    
+                    HStack(spacing: 15) {
+                        Label(workout.createdAt.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        Label("\(workout.sets.count) exercices", systemImage: "dumbbell")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        if !durationText.isEmpty && durationText != "En cours" {
+                            Label(durationText, systemImage: "clock")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
     
     func deleteItems(at offsets: IndexSet) {
         for index in offsets {
